@@ -1,0 +1,17 @@
+__pycache__/
+.venv/
+backend/venv/
+.claude/
+backend/__pycache__/
+dashboard/node_modules/
+dashboard/.next/
+dashboard/dist/
+.env
+backend/.env
+scratch/
+*.log
+*.db
+*.sqlite3
+backend/medicloak.db
+backend/static_scans/*.jpg
+dashboard/public/scans/*.jpg
