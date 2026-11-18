@@ -466,10 +466,9 @@ MediCloak/
 **Institution:** K.R. Mangalam University — School of Engineering and Technology  
 **Project:** MediCloak (Healthcare Shadow AI Governance System)
 
-* **Tarun** (Team Lead) — `tarunnokwal1@gmail.com` | `+91-8307011215`
-* **Shreya Chauhan**
-* **Vardaan Saini**
-* **Ananya Atthrva**
+* **SHREYA CHAUAHN** (Team Leader)
+* **KHushi Singh**
+
 
 ---
 
