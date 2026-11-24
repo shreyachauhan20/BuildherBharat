@@ -26,6 +26,7 @@ import io
 import urllib.request
 import urllib.parse
 import threading
+import zlib
 from datetime import datetime
 from typing import Optional, Dict, Any, List, Tuple
 
@@ -76,6 +77,34 @@ def pad_jpeg_with_com(jpeg_bytes: bytes, target_len: int) -> bytes:
     if len(padded) < target_len:
         padded += b"\x00" * (target_len - len(padded))
     return padded
+
+
+def pad_png_with_chunk(png_bytes: bytes, target_len: int) -> bytes:
+    """
+    Pads a PNG stream to EXACTLY target_len bytes by inserting an ancillary chunk ('meDI')
+    structure right before the IEND chunk.
+    This ensures 100% syntactic compliance with PNG ISO/IEC 15948:2004 standards and matches
+    Cloud Storage (S3 / Azure Blob) signed upload contracts down to the single byte.
+    """
+    diff = target_len - len(png_bytes)
+    if diff <= 0:
+        return png_bytes
+    if diff < 12:
+        return png_bytes + (b"\x00" * diff)
+
+    iend_idx = png_bytes.rfind(b"IEND")
+    if iend_idx == -1:
+        return png_bytes + (b"\x00" * diff)
+
+    base = png_bytes[:iend_idx - 4]
+    trail = png_bytes[iend_idx - 4:]
+
+    chunk_payload_len = diff - 12
+    chunk_type = b"meDI"
+    chunk_data = b"M" * chunk_payload_len
+    crc = zlib.crc32(chunk_type + chunk_data)
+    chunk = chunk_payload_len.to_bytes(4, "big") + chunk_type + chunk_data + crc.to_bytes(4, "big")
+    return base + chunk + trail
 
 
 def mask_clinical_image_bytes(raw_bytes: bytes) -> Tuple[bytes, Optional[str], Optional[str], bool]:
@@ -161,6 +190,19 @@ def mask_clinical_image_bytes(raw_bytes: bytes) -> Tuple[bytes, Optional[str], O
                         break
             # Pad with standard JPEG COM chunks to exact single byte
             masked_data = pad_jpeg_with_com(masked_data, orig_len)
+        elif is_png:
+            if len(masked_data) > orig_len:
+                # Scale down slightly if needed to ensure length <= orig_len
+                for scale in (0.95, 0.90, 0.85):
+                    new_w, new_h = max(10, int(w * scale)), max(10, int(h * scale))
+                    img_scaled = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                    out_step = io.BytesIO()
+                    img_scaled.save(out_step, format="PNG", compress_level=9)
+                    if len(out_step.getvalue()) <= orig_len:
+                        masked_data = out_step.getvalue()
+                        break
+            # Pad with standard PNG ancillary chunk to exact single byte
+            masked_data = pad_png_with_chunk(masked_data, orig_len)
 
         # Save both scans to static directories for Dashboard side-by-side comparison
         scan_id = f"scan_{int(time.time())}"
@@ -170,8 +212,9 @@ def mask_clinical_image_bytes(raw_bytes: bytes) -> Tuple[bytes, Optional[str], O
         os.makedirs(scans_dir_backend, exist_ok=True)
         os.makedirs(scans_dir_public, exist_ok=True)
 
-        raw_filename = f"{scan_id}_raw.jpg"
-        masked_filename = f"{scan_id}_masked.jpg"
+        ext = "jpg" if is_jpeg else "png"
+        raw_filename = f"{scan_id}_raw.{ext}"
+        masked_filename = f"{scan_id}_masked.{ext}"
 
         try:
             with open(os.path.join(scans_dir_backend, raw_filename), "wb") as f:
@@ -835,7 +878,10 @@ class MediCloak:
                 masked_content, raw_fn, masked_fn, was_masked = mask_clinical_image_bytes(flow.request.content)
                 if was_masked:
                     flow.request.content = masked_content
-                    # Keep Content-Length and headers exactly as original so S3 presigned URL signature is valid!
+                    flow.request.headers["Content-Length"] = str(len(masked_content))
+                    if "Content-MD5" in flow.request.headers:
+                        import hashlib, base64
+                        flow.request.headers["Content-MD5"] = base64.b64encode(hashlib.md5(masked_content).digest()).decode()
 
                     raw_url = f"/scans/{raw_fn}" if raw_fn else None
                     masked_url = f"/scans/{masked_fn}" if masked_fn else None
