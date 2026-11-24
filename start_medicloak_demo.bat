@@ -18,18 +18,19 @@ set SCRIPT_DIR=%~dp0
 cd /d "%SCRIPT_DIR%"
 
 echo [1/4] Starting MediCloak FastAPI Backend on Port 8000...
-start "MediCloak-Backend" cmd /k "cd /d %SCRIPT_DIR%backend && title MediCloak-Backend && python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload"
-timeout /t 3 /nobreak >nul
+start "MediCloak-Backend" cmd /k "cd /d "%SCRIPT_DIR%backend" && title MediCloak-Backend && python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload"
+ping -n 4 127.0.0.1 >nul
 
 echo [2/4] Starting MediCloak Sovereign Interceptor Proxy on Port 8080...
-start "MediCloak-Proxy" cmd /k "cd /d %SCRIPT_DIR% && title MediCloak-Proxy && python run_proxy.py"
-timeout /t 2 /nobreak >nul
+start "MediCloak-Proxy" cmd /k "cd /d "%SCRIPT_DIR%" && title MediCloak-Proxy && python run_proxy.py"
+ping -n 3 127.0.0.1 >nul
 
 echo [3/4] Starting React Governance Dashboard on Port 3000...
-start "MediCloak-Dashboard" cmd /k "cd /d %SCRIPT_DIR%dashboard && title MediCloak-Dashboard && npm run dev"
-timeout /t 3 /nobreak >nul
+start "MediCloak-Dashboard" cmd /k "cd /d "%SCRIPT_DIR%dashboard" && title MediCloak-Dashboard && npm run dev"
+echo -> Waiting for servers to initialize...
+ping -n 6 127.0.0.1 >nul
 
-echo [4/4] Launching Proxied Browser & Compliance Dashboard...
+echo [4/4] Launching Proxied Browser and Compliance Dashboard...
 set "BROWSER_EXE="
 set "BROWSER_NAME="
 if exist "C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe" (
@@ -50,14 +51,14 @@ if exist "C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe" (
 )
 
 if defined BROWSER_EXE (
-    echo -> Opening ChatGPT via MediCloak Proxy using %BROWSER_NAME% (127.0.0.1:8080, QUIC Disabled)...
+    echo -> Opening ChatGPT via MediCloak Proxy using %BROWSER_NAME% [127.0.0.1:8080, QUIC Disabled]...
     start "" "%BROWSER_EXE%" --proxy-server="127.0.0.1:8080" --disable-quic --user-data-dir="%TEMP%\medicloak_browser" --ignore-certificate-errors https://chatgpt.com
 ) else (
     echo -> Opening default browser to ChatGPT...
     start "" https://chatgpt.com
 )
 
-timeout /t 2 /nobreak >nul
+ping -n 3 127.0.0.1 >nul
 echo -> Opening MediCloak Live Dashboard (http://localhost:3000)...
 start "" http://localhost:3000
 

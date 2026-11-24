@@ -28,4 +28,4 @@ echo   All MediCloak services stopped cleanly.
 echo   Ports 8000, 8080, and 3000 are freed.
 echo ========================================================
 echo.
-timeout /t 3
+ping -n 4 127.0.0.1 >nul

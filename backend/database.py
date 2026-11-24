@@ -146,11 +146,21 @@ def get_pool() -> pool.SimpleConnectionPool | None:
     if _use_sqlite:
         return None
     if _pool is None:
+        params = _parse_dsn(DATABASE_URL)
+        # Fast socket probe so we don't freeze for 40s if PostgreSQL is not running
+        import socket
+        try:
+            with socket.create_connection((params["host"], params["port"]), timeout=0.5):
+                pass
+        except (socket.timeout, ConnectionRefusedError, OSError) as probe_err:
+            print(f"[MediCloak] PostgreSQL host {params['host']}:{params['port']} unreachable ({probe_err}). Instantly activating local SQLite: {_sqlite_file}")
+            _use_sqlite = True
+            return None
+
         try:
             _pool = pool.SimpleConnectionPool(minconn=2, maxconn=10, dsn=DATABASE_URL)
         except Exception:
             try:
-                params = _parse_dsn(DATABASE_URL)
                 _pool = pool.SimpleConnectionPool(minconn=2, maxconn=10, **params)
             except Exception as e:
                 print(f"[MediCloak] PostgreSQL connection unavailable ({e}). Activating built-in SQLite engine: {_sqlite_file}")
